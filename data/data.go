@@ -33,7 +33,7 @@ func CreateTable() error {
 	statement.Exec()
 	// log.Println("Created params table")
 
-	insertDefaultSQL := `REPLACE INTO params (tryId, auth, orgId, projTempId) VALUES (1, 0, 0, 0)`
+	insertDefaultSQL := `REPLACE INTO params (tryId, auth, orgId, projTempId) VALUES (1, 1, 1, 1)`
 	statement, err = db.Prepare(insertDefaultSQL)
 	if err != nil {
 		return fmt.Errorf("error preparing insert statement: %v", err)

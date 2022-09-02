@@ -7,200 +7,241 @@ package cmd
 import (
 	"fmt"
 	"log"
-	"time"
 
-	// "github.com/charmbracelet/bubbles/spinner"
-	// "github.com/charmbracelet/bubbles/timer"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sabino-ramirez/oah/data"
 
 	"github.com/spf13/cobra"
 )
 
-var (
-	dot = " • "
-)
-
+// app state variables will have this type
 type sessionState uint
 
+// constants for keeping track of app state
 const (
-	defaultTime              = time.Minute
-	inputView   sessionState = iota
+	inputView sessionState = iota
 	promptView
 )
 
+// lipgloss styles
 var (
-	// Available spinners
-	// spinners = []spinner.Spinner{
-	// 	spinner.Line,
-	// 	spinner.Dot,
-	// 	spinner.MiniDot,
-	// 	spinner.Jump,
-	// 	spinner.Pulse,
-	// 	spinner.Points,
-	// 	spinner.Globe,
-	// 	spinner.Moon,
-	// 	spinner.Monkey,
-	// }
-	// unfocusedModelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#3C3C3C"))
-	// modelStyle = lipgloss.NewStyle().
-	// 		Padding(2).
-	// 		BorderStyle(lipgloss.NormalBorder())
-
-	focusedModelStyle = lipgloss.NewStyle().
-		// Padding(2).
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("109"))
-	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
-	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	choiceStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("254"))
+	selectedChoiceStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	focusedModelStyle   = lipgloss.NewStyle().Padding(2).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("109"))
+	spinnerStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
+	helpStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
 type mainModel struct {
 	state     sessionState
 	TextInput textinput.Model
-	// timer   timer.Model
-	// spinner spinner.Model
-	// index   int
+
+	params    []string
+	currParam int
+
+	choice int
+
 	height int
 	width  int
+
+	err error
 }
 
-func newModel(timeout time.Duration) *mainModel {
+// tea message type for handling errors throughout program
+type errMsg struct{ err error }
+
+// in order to get errMsg type to implement error interface
+func (e errMsg) Error() string { return e.err.Error() }
+
+// returns what the initial model state will be
+func initialModel() *mainModel {
 	ti := textinput.New()
 	ti.Placeholder = "copy/paste or type.."
 	ti.Focus()
 	ti.Width = 20
-	m := mainModel{state: inputView, TextInput: ti}
-	// m.timer = timer.New(timeout)
-	// m.spinner = spinner.New()
+
+	params := []string{"auth", "orgId", "projTempId"}
+	m := mainModel{state: inputView, TextInput: ti, params: params, currParam: 0, err: nil}
 	return &m
 }
 
+// tea init function
 func (m *mainModel) Init() tea.Cmd {
-	// start the timer and spinner on program start
-	// return tea.Batch(m.timer.Init(), m.spinner.Tick)
-	return textinput.Blink
+	//*TODO* cannot get the cursor to blink
+	return tea.Batch(textinput.Blink, checkDatabase)
 }
 
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
+	case errMsg:
+		m.err = msg
+
 	case tea.KeyMsg:
+		switch msg.String() {
+		case "j", "down":
+			if m.state == promptView {
+				m.choice += 1
+				if m.choice > 1 {
+					m.choice = 1
+				}
+			}
+		case "k", "up":
+			if m.state == promptView {
+				m.choice -= 1
+				if m.choice < 0 {
+					m.choice = 0
+				}
+			}
+		}
+
 		switch msg.Type {
 		case tea.KeyEsc:
 			return m, tea.Quit
 		case tea.KeyEnter:
 			if m.state == inputView {
+				cmds = append(cmds, addToDb(m.params[m.currParam], m.TextInput.Value()))
+				m.currParam++
+				m.TextInput.Reset()
 				m.state = promptView
 			} else {
-				m.state = inputView
+				if m.choice == 0 && m.currParam < 3 {
+					m.state = inputView
+				} else {
+					if m.currParam > 2 {
+						return m, tea.Quit
+					}
+					m.currParam++
+					m.choice = 0
+				}
 			}
-			// case "n":
-			// 	if m.state == inputView {
-			// 		m.timer = timer.New(defaultTime)
-			// 		cmds = append(cmds, m.timer.Init())
-			// 	} else {
-			// 		m.Next()
-			// 		m.resetSpinner()
-			// 		cmds = append(cmds, spinner.Tick)
-			// 	}
 		}
-		switch m.state {
+
 		// update whichever model is focused
+		switch m.state {
 		case promptView:
-			// m.spinner, cmd = m.spinner.Update(msg)
-			// cmds = append(cmds, cmd)
+			//
 		default:
-			// m.timer, cmd = m.timer.Update(msg)
-			// cmds = append(cmds, cmd)
-			m.TextInput.Focus()
 			m.TextInput, cmd = m.TextInput.Update(msg)
 			cmds = append(cmds, cmd)
 		}
 
 	case tea.WindowSizeMsg:
-		// return m, m.doResize(msg)
 		cmds = append(cmds, m.doResize(msg))
-		// case spinner.TickMsg:
-		// 	m.spinner, cmd = m.spinner.Update(msg)
-		// 	cmds = append(cmds, cmd)
-		// case timer.TickMsg:
-		// 	m.timer, cmd = m.timer.Update(msg)
-		// 	cmds = append(cmds, cmd)
 	}
+
+	// if m.currParam > 3 {
+	// 	return m, tea.Quit
+	// }
 	return m, tea.Batch(cmds...)
 }
 
+// input view
 func (m *mainModel) viewInput() string {
 	var s string
-	// s = fmt.Sprintf("%s", m.timer.View())
-	s = fmt.Sprintf("Enter Auth Token\n\n%s\n\n", m.TextInput.View())
+	var param string
+
+	switch m.currParam {
+	case 0:
+		param = "Auth Token"
+	case 1:
+		param = "Organization Id"
+	case 2:
+		param = "Project Template Id"
+	}
+
+	s = fmt.Sprintf("Enter %s\n\n%s\n\n", param, m.TextInput.View())
 
 	return focusedModelStyle.Width(m.width / 2).Height(m.height / 4).Align(lipgloss.Center).Render(s)
 }
 
+// prompt view
 func (m *mainModel) viewPrompt() string {
-	var s string
+	var promptLabel string
+	var choices string
 
-	return focusedModelStyle.Width(m.width / 3).Height(m.height / 2).Align(lipgloss.Center).Render(s)
+	c := m.choice
+
+	switch m.currParam {
+	case 1:
+		promptLabel = "Do you have Organization Id?\n\n"
+		choices = lipgloss.JoinVertical(lipgloss.Left, checkbox("yes", c == 0), checkbox("no", c == 1))
+	case 2:
+		promptLabel = "Do you have Project Template Id?\n\n"
+		choices = lipgloss.JoinVertical(lipgloss.Left, checkbox("yes", c == 0), checkbox("no", c == 1))
+	case 3:
+		promptLabel = "Great! Run 'oah test' to test some endpoints.\n\n"
+		choices = lipgloss.JoinVertical(lipgloss.Left, checkbox("got it!", true))
+	}
+
+	promptLabel += "%s\n"
+
+	return focusedModelStyle.Width(m.width / 3).Height(m.height / 2).Align(lipgloss.Center).Render(fmt.Sprintf(promptLabel, choices))
 }
 
-// mview
+// main view
 func (m *mainModel) View() string {
-	// model := m.currentFocusedModel()
-	// var footer string
-	// var complete string
+	if m.err != nil {
+		return fmt.Sprintf("Encountered Error: %v", m.err)
+	}
 
 	inputBox := m.viewInput()
 	promptBox := m.viewPrompt()
-	// footer := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Bottom, helpStyle.Render("\nesc: exit\n"))
-	// _, h := lipgloss.Size(promptBox)
+	footer := helpStyle.Render("\n↑/↓, j/k: navigate • ↵: enter/select • esc: exit\n")
 
 	if m.state == inputView {
-		// complete = lipgloss.JoinVertical(lipgloss.Center, inputBox, footer)
-		complete := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, inputBox)
-		return lipgloss.JoinVertical(lipgloss.Center, complete)
+		complete := lipgloss.JoinVertical(lipgloss.Center, inputBox, footer)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, complete)
 
 	}
 
-	complete := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, promptBox)
-	return lipgloss.JoinVertical(lipgloss.Center, complete)
+	complete := lipgloss.JoinVertical(lipgloss.Center, promptBox, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, complete)
 }
 
+// tea command to add value to db
+func addToDb(key string, value string) tea.Cmd {
+	return func() tea.Msg {
+		if err := data.UpdateX(key, value); err != nil {
+			return errMsg{err}
+		}
+		return nil
+	}
+}
+
+// tea command to create table and do default insert
+func checkDatabase() tea.Msg {
+	if err := data.CreateTable(); err != nil {
+		return errMsg{err}
+	}
+	return nil
+}
+
+// tea command to re-render app when window is resized
 func (m *mainModel) doResize(msg tea.WindowSizeMsg) tea.Cmd {
 	m.height = msg.Height
 	m.width = msg.Width
 	return nil
 }
 
-// func (m *mainModel) currentFocusedModel() string {
-// 	if m.state == inputView {
-// 		return "timer"
-// 	}
-// 	return "spinner"
-// }
-
-// func (m *mainModel) Next() {
-// 	if m.index == len(spinners)-1 {
-// 		m.index = 0
-// 	} else {
-// 		m.index++
-// 	}
-// }
-
-func (m *mainModel) resetSpinner() {
-	// m.spinner = spinner.New()
-	// m.spinner.Style = spinnerStyle
-	// m.spinner.Spinner = spinners[m.index]
+// format checkboxes for prompt view
+func checkbox(label string, checked bool) string {
+	if checked {
+		return selectedChoiceStyle.Render("[x] " + label)
+	}
+	return choiceStyle.Render("[ ] " + label)
 }
 
+// cobra setup
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Enter Token and other parameters.",
 	Run: func(cmd *cobra.Command, args []string) {
-		p := tea.NewProgram(newModel(defaultTime), tea.WithAltScreen())
+		p := tea.NewProgram(initialModel(), tea.WithAltScreen())
 
 		if err := p.Start(); err != nil {
 			log.Fatal(err)
@@ -208,6 +249,7 @@ var setupCmd = &cobra.Command{
 	},
 }
 
+// cobra init function
 func init() {
 	rootCmd.AddCommand(setupCmd)
 }
