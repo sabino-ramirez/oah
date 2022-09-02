@@ -24,10 +24,10 @@ package cmd
 import (
 	"os"
 
+	"github.com/sabino-ramirez/oah/cmd/setup"
+	"github.com/sabino-ramirez/oah/cmd/test"
 	"github.com/spf13/cobra"
 )
-
-
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -47,6 +47,8 @@ func Execute() {
 
 func init() {
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+  rootCmd.AddCommand(setup.SetupCmd)
+  rootCmd.AddCommand(test.TestCmd)
 }
 
 

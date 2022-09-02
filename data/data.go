@@ -7,6 +7,7 @@ import (
 	// "log"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sabino-ramirez/oah/models"
 	// "github.com/sabino-ramirez/oah/models"
 )
 
@@ -58,14 +59,14 @@ func UpdateX(key string, value any) error {
 	return nil
 }
 
-// func GetXValue() (models.DbRow, error) {
-// 	selectSQL := `SELECT auth, orgId, projTempId FROM params WHERE tryId = 1;`
-//
-// 	row := db.QueryRow(selectSQL)
-// 	params := models.DbRow{}
-// 	if err = row.Scan(&params.Auth, &params.OrgId, &params.ProjTempId); err != nil {
-// 		return models.DbRow{}, fmt.Errorf("not found: %v", err)
-// 	}
-//
-// 	return params, nil
-// }
+func GetXValue() (models.DbRow, error) {
+	selectSQL := `SELECT auth, orgId, projTempId FROM params WHERE tryId = 1;`
+
+	row := db.QueryRow(selectSQL)
+	params := models.DbRow{}
+	if err = row.Scan(&params.Auth, &params.OrgId, &params.ProjTempId); err != nil {
+		return models.DbRow{}, fmt.Errorf("not found: %v", err)
+	}
+
+	return params, nil
+}
