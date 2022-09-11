@@ -1,6 +1,5 @@
 /*
 Copyright © 2022 Sabino Ramirez <sabinoramirez017@gmail.com>
-
 */
 package setup
 
@@ -29,8 +28,7 @@ const (
 var (
 	choiceStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("254"))
 	selectedChoiceStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
-	focusedModelStyle   = lipgloss.NewStyle().Padding(2).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("109"))
-	spinnerStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
+	focusedModelStyle   = lipgloss.NewStyle().Padding(2).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("69"))
 	helpStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
@@ -247,9 +245,4 @@ var SetupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 	},
-}
-
-// cobra init function
-func init() {
-	// rootCmd.AddCommand(setupCmd)
 }

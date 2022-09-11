@@ -4,11 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	// "log"
-
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sabino-ramirez/oah/models"
-	// "github.com/sabino-ramirez/oah/models"
 )
 
 var db *sql.DB
@@ -59,7 +56,7 @@ func UpdateX(key string, value any) error {
 	return nil
 }
 
-func GetXValue() (models.DbRow, error) {
+func GetValues() (models.DbRow, error) {
 	selectSQL := `SELECT auth, orgId, projTempId FROM params WHERE tryId = 1;`
 
 	row := db.QueryRow(selectSQL)
