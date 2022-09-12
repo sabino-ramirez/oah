@@ -19,7 +19,8 @@ import (
 
 // tea message type for handling errors throughout program
 type errMsg struct{ err error }
-type dbMessage models.DbRow
+
+// type dbMessage models.DbRow
 
 // app state variables will have this type
 type sessionState uint
@@ -56,14 +57,14 @@ type mainModel struct {
 }
 
 // initial command to get variables from db
-func getDbInfo() tea.Msg {
-	params, err := data.GetValues()
-	if err != nil {
-		return errMsg{err}
-	}
-
-	return dbMessage(params)
-}
+// func getDbInfo() tea.Msg {
+// 	params, err := data.GetValues()
+// 	if err != nil {
+// 		return errMsg{err}
+// 	}
+//
+// 	return dbMessage(params)
+// }
 
 // function returns initial state
 func initialModel() *mainModel {
@@ -88,31 +89,33 @@ func initialModel() *mainModel {
 
 // calls the getDbInfo command and kicks off the program
 func (m *mainModel) Init() tea.Cmd {
-	return getDbInfo
+	return m.refreshDbItems //getDbInfo
 }
 
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	var cmds []tea.Cmd
+	// var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case errMsg:
 		m.err = msg
 
-	case dbMessage:
-		m.dbItems = models.DbRow(msg)
+	// case dbMessage:
+	// 	m.dbItems = models.DbRow(msg)
 
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEsc:
-			cmds = append(cmds, tea.Quit)
-			// return m, tea.Quit
+			// cmds = append(cmds, tea.Quit)
+			return m, tea.Quit
 
 		case tea.KeyEnter:
 			switch m.state {
 			case dbItemsView:
 				if m.prompt == false {
 					switch m.table.SelectedRow()[0] {
+					case "Auth":
+						m.currParam = "auth"
 					case "Org Id":
 						m.currParam = "orgId"
 					case "Proj. Temp. Id":
@@ -120,17 +123,12 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.prompt = true
 				} else {
-					switch m.currParam {
-					case "orgId":
-						cmds = append(cmds, addToDb(m.currParam, m.textInput.Value()))
-            // cmds = append(cmds, getDbInfo)
-					case "projTempId":
-						cmds = append(cmds, addToDb(m.currParam, m.textInput.Value()))
-					}
 					m.prompt = false
-					m.textInput.Reset()
+					// m.textInput.Reset()
+					return m, addToDb(m.currParam, m.textInput.Value())
 				}
 			}
+			// cmds = append(cmds, m.refreshDbItems)
 
 		case tea.KeyTab:
 			if m.state == dbItemsView {
@@ -143,23 +141,25 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == dbItemsView {
 			if m.prompt {
 				m.textInput, cmd = m.textInput.Update(msg)
-				cmds = append(cmds, cmd)
+				return m, cmd
+				// cmds = append(cmds, cmd)
 			} else {
 				m.table, cmd = m.table.Update(msg)
-				cmds = append(cmds, cmd)
+				return m, cmd
+				// cmds = append(cmds, cmd)
 			}
 		}
 
 	case tea.WindowSizeMsg:
-		cmds = append(cmds, m.doResize(msg))
-		// return m, m.doResize(msg)
+		// cmds = append(cmds, m.doResize(msg))
+		return m, m.doResize(msg)
 	}
 
 	// m.table, cmd = m.table.Update(msg)
 	// cmds = append(cmds, cmd)
 
-	// return m, cmd
-	return m, tea.Batch(cmds...)
+	return m, m.refreshDbItems
+	// return m, tea.Batch(cmds...)
 }
 
 // returns view for dbitems adjustment
@@ -227,6 +227,20 @@ func (m *mainModel) View() string {
 func (m *mainModel) doResize(msg tea.WindowSizeMsg) tea.Cmd {
 	m.height = msg.Height
 	m.width = msg.Width
+	return nil
+}
+
+func (m *mainModel) refreshDbItems() tea.Msg {
+	params, err := data.GetValues()
+
+	m.dbItems.Auth = params.Auth
+	m.dbItems.OrgId = params.OrgId
+	m.dbItems.ProjTempId = params.ProjTempId
+
+	if err != nil {
+		return errMsg{err}
+	}
+
 	return nil
 }
 
