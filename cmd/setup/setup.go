@@ -65,12 +65,13 @@ func initialModel() *mainModel {
 	return &m
 }
 
-// tea init function
+// *init tea init function
 func (m *mainModel) Init() tea.Cmd {
 	//*TODO* cannot get the cursor to blink
 	return tea.Batch(textinput.Blink, checkDatabase)
 }
 
+// *update
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd

@@ -20,8 +20,6 @@ import (
 // tea message type for handling errors throughout program
 type errMsg struct{ err error }
 
-// type dbMessage models.DbRow
-
 // app state variables will have this type
 type sessionState uint
 
@@ -33,12 +31,24 @@ const (
 
 // lipgloss styles
 var (
-	modelStyle        = lipgloss.NewStyle().Padding(0, 0, 0, 0).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#3C3C3C")).Foreground(lipgloss.Color("#3C3C3C"))
-	focusedModelStyle = lipgloss.NewStyle().Padding(0, 0, 0, 0).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("69"))
-	helpStyle         = lipgloss.NewStyle().Align(lipgloss.Center).Foreground(lipgloss.Color("241"))
-	baseStyle         = lipgloss.NewStyle().
+	modelStyle = lipgloss.NewStyle().Padding(0, 0, 0, 0).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#3C3C3C")).
+			Foreground(lipgloss.Color("#3C3C3C"))
+
+	focusedModelStyle = lipgloss.NewStyle().Padding(0, 0, 0, 0).
 				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("240"))
+				BorderForeground(lipgloss.Color("69"))
+
+	helpStyle = lipgloss.NewStyle().Align(lipgloss.Center).
+			Foreground(lipgloss.Color("241"))
+
+	choiceStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("254"))
+	selectedChoiceStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+
+	baseStyle = lipgloss.NewStyle().
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("240"))
 )
 
 // in order to get errMsg type to implement error interface
@@ -47,6 +57,7 @@ func (e errMsg) Error() string { return e.err.Error() }
 type mainModel struct {
 	state     sessionState
 	prompt    bool
+	choice    int
 	dbItems   models.DbRow
 	currParam string
 	table     table.Model
@@ -55,16 +66,6 @@ type mainModel struct {
 	height    int
 	err       error
 }
-
-// initial command to get variables from db
-// func getDbInfo() tea.Msg {
-// 	params, err := data.GetValues()
-// 	if err != nil {
-// 		return errMsg{err}
-// 	}
-//
-// 	return dbMessage(params)
-// }
 
 // function returns initial state
 func initialModel() *mainModel {
@@ -87,26 +88,21 @@ func initialModel() *mainModel {
 	return &m
 }
 
-// calls the getDbInfo command and kicks off the program
+// calls the refreshDb command and kicks off the program
 func (m *mainModel) Init() tea.Cmd {
-	return m.refreshDbItems //getDbInfo
+	return m.refreshDbItems
 }
 
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	// var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case errMsg:
 		m.err = msg
 
-	// case dbMessage:
-	// 	m.dbItems = models.DbRow(msg)
-
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEsc:
-			// cmds = append(cmds, tea.Quit)
 			return m, tea.Quit
 
 		case tea.KeyEnter:
@@ -124,11 +120,11 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.prompt = true
 				} else {
 					m.prompt = false
-					// m.textInput.Reset()
 					return m, addToDb(m.currParam, m.textInput.Value())
 				}
+			case resultsView:
+				// when user press enter on results view
 			}
-			// cmds = append(cmds, m.refreshDbItems)
 
 		case tea.KeyTab:
 			if m.state == dbItemsView {
@@ -142,37 +138,40 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.prompt {
 				m.textInput, cmd = m.textInput.Update(msg)
 				return m, cmd
-				// cmds = append(cmds, cmd)
 			} else {
 				m.table, cmd = m.table.Update(msg)
 				return m, cmd
-				// cmds = append(cmds, cmd)
+			}
+		} else {
+			switch msg.String() {
+			case "j", "down":
+				if m.state == resultsView {
+					m.choice += 1
+					if m.choice > 1 {
+						m.choice = 1
+					}
+				}
+			case "k", "up":
+				if m.state == resultsView {
+					m.choice -= 1
+					if m.choice < 0 {
+						m.choice = 0
+					}
+				}
 			}
 		}
 
 	case tea.WindowSizeMsg:
-		// cmds = append(cmds, m.doResize(msg))
 		return m, m.doResize(msg)
 	}
 
-	// m.table, cmd = m.table.Update(msg)
-	// cmds = append(cmds, cmd)
-
 	return m, m.refreshDbItems
-	// return m, tea.Batch(cmds...)
 }
 
 // returns view for dbitems adjustment
 func (m *mainModel) viewDbItems() string {
-	// tableContent := "Org Id  |  Proj. Temp. Id\n%v  |  %v"
-	// tableContent = fmt.Sprintf(tableContent, m.dbItems.OrgId, m.dbItems.ProjTempId)
-	// table := focusedModelStyle.Width(m.width / 2).Height(m.height / 8).Align(lipgloss.Center).Render(tableContent)
-	// return tableContent
-
 	m.table.SetRows([]table.Row{
 		{"Auth", m.dbItems.Auth},
-		// {"Org Id", m.dbItems.OrgId},
-		// {"Proj. Temp. Id", m.dbItems.ProjTempId},
 		{"Org Id", strconv.Itoa(m.dbItems.OrgId)},
 		{"Proj. Temp. Id", strconv.Itoa(m.dbItems.ProjTempId)},
 	})
@@ -204,7 +203,16 @@ func (m *mainModel) viewDbItems() string {
 
 // returns view for endpoint results
 func (m *mainModel) viewResults() string {
-	s := fmt.Sprintf("db items: %v", m.dbItems)
+	var promptLabel string
+	var choices string
+
+	c := m.choice
+
+	promptLabel = "Select Test Operation\n\n%s\n"
+	choices = lipgloss.JoinVertical(lipgloss.Left, checkbox("Get Project Templates", c == 0), checkbox("Get Requisitions", c == 1))
+
+	// s := focusedModelStyle.Width(m.width / 3).Height(m.height / 2).Align(lipgloss.Center).Render(fmt.Sprintf(promptLabel, choices))
+	s := fmt.Sprintf(promptLabel, choices)
 	return s
 }
 
@@ -251,6 +259,14 @@ func addToDb(key string, value string) tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// format checkboxes for prompt view
+func checkbox(label string, checked bool) string {
+	if checked {
+		return selectedChoiceStyle.Render("[x] " + label)
+	}
+	return choiceStyle.Render("[ ] " + label)
 }
 
 // cobra stuff
