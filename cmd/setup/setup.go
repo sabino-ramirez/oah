@@ -32,6 +32,7 @@ var (
 	helpStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
+// main model
 type mainModel struct {
 	state     sessionState
 	TextInput textinput.Model
@@ -47,9 +48,9 @@ type mainModel struct {
 	err error
 }
 
+// handling errors
 // tea message type for handling errors throughout program
 type errMsg struct{ err error }
-
 // in order to get errMsg type to implement error interface
 func (e errMsg) Error() string { return e.err.Error() }
 

@@ -3,10 +3,14 @@ Copyright © 2022 Sabino Ramirez <sabinoramirez017@gmail.com>
 */
 package test
 
+// imports
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -14,11 +18,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sabino-ramirez/oah/data"
 	"github.com/sabino-ramirez/oah/models"
+	"github.com/sabino-ramirez/oah/utils"
 	"github.com/spf13/cobra"
 )
 
 // tea message type for handling errors throughout program
 type errMsg struct{ err error }
+type statusMsg int
 
 // app state variables will have this type
 type sessionState uint
@@ -28,6 +34,13 @@ const (
 	dbItemsView sessionState = iota
 	resultsView
 )
+
+var netTransport = &http.Transport{
+	Dial: (&net.Dialer{
+		Timeout: 5 * time.Second,
+	}).Dial,
+	TLSHandshakeTimeout: 5 * time.Second,
+}
 
 // lipgloss styles
 var (
@@ -51,20 +64,19 @@ var (
 			BorderForeground(lipgloss.Color("240"))
 )
 
-// in order to get errMsg type to implement error interface
-func (e errMsg) Error() string { return e.err.Error() }
-
 type mainModel struct {
-	state     sessionState
-	prompt    bool
-	choice    int
-	dbItems   models.DbRow
-	currParam string
-	table     table.Model
-	textInput textinput.Model
-	width     int
-	height    int
-	err       error
+	state          sessionState
+	prompt         bool
+	chooseEndpoint bool
+	choice         int
+	dbItems        models.DbRow
+	statusCode     int
+	currParam      string
+	table          table.Model
+	textInput      textinput.Model
+	width          int
+	height         int
+	err            error
 }
 
 // function returns initial state
@@ -84,7 +96,7 @@ func initialModel() *mainModel {
 		table.WithFocused(true),
 	)
 
-	m := mainModel{state: resultsView, table: t, textInput: ti}
+	m := mainModel{state: resultsView, table: t, textInput: ti, chooseEndpoint: true}
 	return &m
 }
 
@@ -93,10 +105,14 @@ func (m *mainModel) Init() tea.Cmd {
 	return m.refreshDbItems
 }
 
+// main update
 func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case statusMsg:
+		m.statusCode = int(msg)
+
 	case errMsg:
 		m.err = msg
 
@@ -123,7 +139,12 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, addToDb(m.currParam, m.textInput.Value())
 				}
 			case resultsView:
-				// when user press enter on results view
+				if m.chooseEndpoint {
+					m.chooseEndpoint = false
+					return m, m.checkStatusCode(m.choice)
+				} else {
+					m.chooseEndpoint = true
+				}
 			}
 
 		case tea.KeyTab:
@@ -205,14 +226,20 @@ func (m *mainModel) viewDbItems() string {
 func (m *mainModel) viewResults() string {
 	var promptLabel string
 	var choices string
+	var s string
 
 	c := m.choice
 
 	promptLabel = "Select Test Operation\n\n%s\n"
 	choices = lipgloss.JoinVertical(lipgloss.Left, checkbox("Get Project Templates", c == 0), checkbox("Get Requisitions", c == 1))
 
+	if m.chooseEndpoint {
+		s = fmt.Sprintf(promptLabel, choices)
+	} else {
+		s = fmt.Sprintf("status code is: %v", m.statusCode)
+	}
+
 	// s := focusedModelStyle.Width(m.width / 3).Height(m.height / 2).Align(lipgloss.Center).Render(fmt.Sprintf(promptLabel, choices))
-	s := fmt.Sprintf(promptLabel, choices)
 	return s
 }
 
@@ -231,13 +258,14 @@ func (m *mainModel) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, complete)
 }
 
-// tea command to re-render app when window is resized
+// cmd to re-render app when window is resized
 func (m *mainModel) doResize(msg tea.WindowSizeMsg) tea.Cmd {
 	m.height = msg.Height
 	m.width = msg.Width
 	return nil
 }
 
+// cmd to refresh table with db values
 func (m *mainModel) refreshDbItems() tea.Msg {
 	params, err := data.GetValues()
 
@@ -252,12 +280,42 @@ func (m *mainModel) refreshDbItems() tea.Msg {
 	return nil
 }
 
+// cmd update db value
 func addToDb(key string, value string) tea.Cmd {
 	return func() tea.Msg {
 		if err := data.UpdateX(key, value); err != nil {
 			return errMsg{err}
 		}
 		return nil
+	}
+}
+
+// cmd for getting status code based on endpoint position in results view list
+func (m *mainModel) checkStatusCode(choice int) tea.Cmd {
+	return func() tea.Msg {
+		client := &http.Client{Timeout: time.Second * 10, Transport: netTransport}
+		ovationAPI := models.NewClient(client, 1, 1, "Bearer "+m.dbItems.Auth)
+
+		var projectReqs models.ProjectRequisitions
+		var projectIds models.ProjectTemplates
+
+		var statusCode int
+
+		switch choice {
+		case 0:
+			statusCode, _ = utils.GetProjectTemplates(ovationAPI, &projectIds)
+			// if err != nil {
+			// 	log.Println("error reading response:", err)
+			// }
+
+		case 1:
+			statusCode, _ = utils.GetProjectRequisitions(ovationAPI, &projectReqs)
+			// if err != nil {
+			// log.Println("error reading response:", err)
+			// }
+		}
+
+		return statusMsg(statusCode)
 	}
 }
 
@@ -268,6 +326,9 @@ func checkbox(label string, checked bool) string {
 	}
 	return choiceStyle.Render("[ ] " + label)
 }
+
+// in order to get errMsg type to implement error interface
+func (e errMsg) Error() string { return e.err.Error() }
 
 // cobra stuff
 var TestCmd = &cobra.Command{
