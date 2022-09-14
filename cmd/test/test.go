@@ -146,6 +146,7 @@ func (m *mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.chooseEndpoint = true
 				}
 			}
+			// m.choice = 0
 
 		case tea.KeyTab:
 			if m.state == dbItemsView {
@@ -236,7 +237,8 @@ func (m *mainModel) viewResults() string {
 	if m.chooseEndpoint {
 		s = fmt.Sprintf(promptLabel, choices)
 	} else {
-		s = fmt.Sprintf("status code is: %v", m.statusCode)
+		s = fmt.Sprintf("status code is: %v\n\n\n", m.statusCode)
+		s += checkbox("Ok", true)
 	}
 
 	// s := focusedModelStyle.Width(m.width / 3).Height(m.height / 2).Align(lipgloss.Center).Render(fmt.Sprintf(promptLabel, choices))
@@ -294,7 +296,7 @@ func addToDb(key string, value string) tea.Cmd {
 func (m *mainModel) checkStatusCode(choice int) tea.Cmd {
 	return func() tea.Msg {
 		client := &http.Client{Timeout: time.Second * 10, Transport: netTransport}
-		ovationAPI := models.NewClient(client, 1, 1, "Bearer "+m.dbItems.Auth)
+		ovationAPI := models.NewClient(client, m.dbItems.OrgId, m.dbItems.ProjTempId, "Bearer "+m.dbItems.Auth)
 
 		var projectReqs models.ProjectRequisitions
 		var projectIds models.ProjectTemplates
